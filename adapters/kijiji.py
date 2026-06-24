@@ -1,3 +1,5 @@
+# Kijiji removed RSS support and serves JS-rendered HTML — this adapter returns []
+# until a viable fetch method is found.
 import json
 import re
 from datetime import datetime
@@ -34,6 +36,8 @@ def _extract_id(url: str) -> str:
 
 
 def fetch_listings(query: str, max_results: int = 50) -> list:
+    # Kijiji requires JS rendering — no viable free fetch path currently
+    return []
     url = _RSS_URL.format(query=_slugify(query))
     try:
         feed = feedparser.parse(url)

@@ -67,17 +67,16 @@ def test_etsy_fetch_returns_list():
 
 from adapters.chrono24 import fetch_listings as c24_fetch
 
-CHRONO24_HTML = """
-<html><body>
-<article class="article-item-container" data-listing-id="123456">
-  <a class="js-article-item-container" href="/timex/marlin--id123456.htm">
-    <div class="article-title">Timex Marlin Vintage 1970s</div>
-    <div class="price">$ 35</div>
-    <img src="https://cdn.chrono24.com/images/uhren/123456.jpg" />
-  </a>
-</article>
-</body></html>
-"""
+CHRONO24_HTML = """<html><head>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[{"@type":"AggregateOffer","offers":[
+  {"@type":"Offer","availability":"http://schema.org/InStock",
+   "image":[{"@type":"ImageObject","contentUrl":"https://img.chrono24.com/images/uhren/123456.jpg"}],
+   "name":"Timex Marlin Vintage 1970s","price":"35",
+   "url":"https://www.chrono24.com/timex/marlin--id123456.htm"}
+]}]}
+</script>
+</head><body></body></html>"""
 
 
 def test_chrono24_fetch_returns_standard_shape_or_empty():

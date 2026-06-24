@@ -1,9 +1,9 @@
 import json
+import re
 from datetime import datetime
 from urllib.parse import urlencode
 
 import requests
-from bs4 import BeautifulSoup
 
 import config
 
@@ -15,15 +15,20 @@ _HEADERS = {
 }
 
 
+def _extract_id(url: str) -> str:
+    match = re.search(r"--id(\d+)\.htm", url)
+    return match.group(1) if match else url.split("/")[-1]
+
+
 def fetch_listings(query: str, max_results: int = 50) -> list:
-    """Scrape Chrono24 via ScraperAPI if key is configured, direct request otherwise."""
+    """Fetch Chrono24 listings from JSON-LD structured data embedded in search page."""
     target_url = f"{_SEARCH_URL}?{urlencode({'query': query, 'dosearch': 'true'})}"
     try:
         if config.SCRAPERAPI_KEY:
             resp = requests.get(
                 "http://api.scraperapi.com/",
-                params={"api_key": config.SCRAPERAPI_KEY, "url": target_url},
-                timeout=30,
+                params={"api_key": config.SCRAPERAPI_KEY, "url": target_url, "premium": "true"},
+                timeout=60,
             )
         else:
             resp = requests.get(target_url, headers=_HEADERS, timeout=10)
@@ -32,39 +37,42 @@ def fetch_listings(query: str, max_results: int = 50) -> list:
         return []
 
     try:
-        soup = BeautifulSoup(resp.text, "html.parser")
-        articles = soup.select("article.article-item-container")[:max_results]
+        ld_blocks = re.findall(
+            r'<script type="application/ld\+json">(.*?)</script>',
+            resp.text,
+            re.DOTALL,
+        )
+        offers = []
+        for block in ld_blocks:
+            data = json.loads(block.strip())
+            for node in data.get("@graph", []):
+                if node.get("@type") == "AggregateOffer":
+                    offers = node.get("offers", [])
+                    break
+            if offers:
+                break
     except Exception:
         return []
 
     results = []
-    for article in articles:
+    for offer in offers[:max_results]:
         try:
-            listing_id = article.get("data-listing-id", "")
-            link = article.select_one("a[href]")
-            href = link["href"] if link else ""
-            url = f"{_BASE}{href}" if href.startswith("/") else href
-
-            title_el = article.select_one(".article-title")
-            title = title_el.get_text(strip=True) if title_el else ""
-
-            price_el = article.select_one(".price")
-            price_text = price_el.get_text(strip=True) if price_el else "0"
-            price_digits = "".join(c for c in price_text if c.isdigit() or c == ".")
-            price_usd = float(price_digits) if price_digits else 0.0
+            url = offer.get("url", "")
+            listing_id = _extract_id(url)
+            price_usd = float(offer.get("price", 0) or 0)
             price_cad = round(price_usd * 1.38, 2)
 
-            all_imgs = []
-            for img_el in article.select("img"):
-                src = img_el.get("data-src") or img_el.get("data-lazy-src") or img_el.get("src") or ""
-                if src and src not in all_imgs:
-                    all_imgs.append(src)
+            images = offer.get("image", [])
+            if isinstance(images, list):
+                all_imgs = [img.get("contentUrl", "") for img in images if img.get("contentUrl")]
+            else:
+                all_imgs = []
             image_url = all_imgs[0] if all_imgs else ""
 
             results.append({
                 "id": f"chrono24-{listing_id}",
                 "source": "chrono24",
-                "title": title,
+                "title": offer.get("name", ""),
                 "price": price_cad,
                 "shipping": None,
                 "shipping_confirmed": False,
@@ -76,7 +84,7 @@ def fetch_listings(query: str, max_results: int = 50) -> list:
                 "listed_at": datetime.utcnow().strftime("%Y-%m-%d"),
                 "synced_at": datetime.utcnow().isoformat(),
                 "is_new": 1,
-                "raw": {"listing_id": listing_id, "title": title},
+                "raw": {"listing_id": listing_id, "title": offer.get("name", "")},
             })
         except Exception:
             continue

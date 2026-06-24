@@ -22,18 +22,17 @@ def run_sync(conn) -> int:
     prefs = get_preferences(conn)
     search_query = prefs.get("search_query") or "timex vintage"
 
-    FETCH_CAP = 100
+    PER_SOURCE_CAP = 30
 
     all_listings = []
     if prefs.get("ebay_enabled", 1):
-        all_listings.extend(ebay.fetch_listings(search_query, max_results=FETCH_CAP))
-    if prefs.get("etsy_enabled", 1) and len(all_listings) < FETCH_CAP:
-        all_listings.extend(etsy.fetch_listings(search_query, max_results=FETCH_CAP - len(all_listings)))
-    if prefs.get("chrono24_enabled", 1) and len(all_listings) < FETCH_CAP:
-        all_listings.extend(chrono24.fetch_listings(search_query, max_results=FETCH_CAP - len(all_listings)))
-    if prefs.get("kijiji_enabled", 1) and len(all_listings) < FETCH_CAP:
-        all_listings.extend(kijiji.fetch_listings(search_query, max_results=FETCH_CAP - len(all_listings)))
-    all_listings = all_listings[:FETCH_CAP]
+        all_listings.extend(ebay.fetch_listings(search_query, max_results=PER_SOURCE_CAP))
+    if prefs.get("etsy_enabled", 1):
+        all_listings.extend(etsy.fetch_listings(search_query, max_results=PER_SOURCE_CAP))
+    if prefs.get("chrono24_enabled", 1):
+        all_listings.extend(chrono24.fetch_listings(search_query, max_results=PER_SOURCE_CAP))
+    if prefs.get("kijiji_enabled", 1):
+        all_listings.extend(kijiji.fetch_listings(search_query, max_results=PER_SOURCE_CAP))
 
     new_count = 0
     for listing in all_listings:
