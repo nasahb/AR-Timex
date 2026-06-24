@@ -108,3 +108,66 @@ def test_chrono24_uses_scraperapi_when_key_set():
     assert call_url == "http://api.scraperapi.com/"
     assert mock_get.call_args[1]["params"]["api_key"] == "test-key"
     assert len(results) == 1
+
+# ── Kijiji ────────────────────────────────────────────────────────────────
+
+from adapters.kijiji import fetch_listings as kijiji_fetch
+
+KIJIJI_DESCRIPTION = """
+<table>
+<tr>
+  <td><a href="/v-watches/canada/timex-marlin/1234567890">
+    <img src="https://i.ebayimg.com/00/s/abc.jpg" />
+  </a></td>
+  <td>Price: $45.00<br/>Vintage Timex Marlin in good condition.</td>
+</tr>
+</table>
+"""
+
+
+def test_kijiji_fetch_returns_standard_shape():
+    entry = MagicMock()
+    entry.title = "Vintage Timex Marlin"
+    entry.link = "https://www.kijiji.ca/v-watches/canada/timex-marlin/1234567890"
+    entry.published_parsed = None
+    entry.get.side_effect = lambda k, d="": {
+        "title": "Vintage Timex Marlin",
+        "link": "https://www.kijiji.ca/v-watches/canada/timex-marlin/1234567890",
+        "summary": KIJIJI_DESCRIPTION,
+    }.get(k, d)
+
+    mock_feed = MagicMock()
+    mock_feed.entries = [entry]
+
+    with patch("adapters.kijiji.feedparser.parse", return_value=mock_feed):
+        results = kijiji_fetch("timex vintage", max_results=10)
+
+    assert len(results) == 1
+    listing = results[0]
+    assert listing["id"] == "kijiji-1234567890"
+    assert listing["source"] == "kijiji"
+    assert listing["price"] == 45.0
+    assert listing["seller_country"] == "CA"
+    assert "kijiji.ca" in listing["url"]
+    assert listing["image_url"] == "https://i.ebayimg.com/00/s/abc.jpg"
+    assert '"https://i.ebayimg.com/00/s/abc.jpg"' in listing["image_urls"]
+    assert "raw" in listing
+
+
+def test_kijiji_fetch_empty_on_feedparser_failure():
+    with patch("adapters.kijiji.feedparser.parse", side_effect=Exception("network error")):
+        results = kijiji_fetch("timex vintage", max_results=10)
+    assert results == []
+
+
+def test_kijiji_fetch_skips_malformed_entries():
+    entry_bad = MagicMock()
+    entry_bad.get.side_effect = Exception("boom")
+
+    mock_feed = MagicMock()
+    mock_feed.entries = [entry_bad]
+
+    with patch("adapters.kijiji.feedparser.parse", return_value=mock_feed):
+        results = kijiji_fetch("timex", max_results=10)
+
+    assert results == []
