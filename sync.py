@@ -20,7 +20,6 @@ def run_sync(conn) -> int:
     # Clear previous new flags before fetching — new listings from THIS sync get is_new=1
     mark_seen(conn)
     prefs = get_preferences(conn)
-    taste_description = prefs.get("taste_description", "")
     search_query = prefs.get("search_query") or "timex vintage"
 
     FETCH_CAP = 100
@@ -60,6 +59,9 @@ def run_sync(conn) -> int:
     ids_to_enrich = get_unenriched_ids(conn)
     if ids_to_enrich:
         db_path = conn.execute("PRAGMA database_list").fetchone()[2]
+        if not db_path:
+            set_last_synced(conn, datetime.utcnow().isoformat())
+            return new_count
 
         def _enrich_one(listing_id):
             worker_conn = get_conn(db_path)

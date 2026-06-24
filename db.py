@@ -157,7 +157,7 @@ def save_score(conn: sqlite3.Connection, score: dict) -> None:
 
 def get_unenriched_ids(conn: sqlite3.Connection) -> list:
     rows = conn.execute(
-        "SELECT id FROM listings WHERE ai_summary IS NULL OR detected_size IS NULL"
+        "SELECT id FROM listings WHERE ai_summary IS NULL AND detected_size IS NULL"
     ).fetchall()
     return [r["id"] for r in rows]
 
