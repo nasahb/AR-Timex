@@ -87,6 +87,8 @@ def test_save_preferences(conn):
 
 def test_save_score_and_unscored(conn):
     save_listing(conn, SAMPLE_LISTING)
+    conn.execute("UPDATE listings SET ai_summary = 'test summary' WHERE id = 'ebay-100001'")
+    conn.commit()
     assert "ebay-100001" in get_unscored_ids(conn)
     save_score(conn, SAMPLE_SCORE)
     assert "ebay-100001" not in get_unscored_ids(conn)
