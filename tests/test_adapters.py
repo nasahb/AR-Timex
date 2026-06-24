@@ -93,3 +93,18 @@ def test_chrono24_fetch_returns_standard_shape_or_empty():
         assert "id" in listing
         assert listing["source"] == "chrono24"
         assert "raw" in listing
+
+
+def test_chrono24_uses_scraperapi_when_key_set():
+    mock_resp = MagicMock()
+    mock_resp.text = CHRONO24_HTML
+    mock_resp.raise_for_status = MagicMock()
+
+    with patch("adapters.chrono24.config.SCRAPERAPI_KEY", "test-key"), \
+         patch("adapters.chrono24.requests.get", return_value=mock_resp) as mock_get:
+        results = c24_fetch("timex", max_results=10)
+
+    call_url = mock_get.call_args[0][0]
+    assert call_url == "http://api.scraperapi.com/"
+    assert mock_get.call_args[1]["params"]["api_key"] == "test-key"
+    assert len(results) == 1

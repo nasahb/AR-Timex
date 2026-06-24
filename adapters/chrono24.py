@@ -1,7 +1,11 @@
+import json
 from datetime import datetime
+from urllib.parse import urlencode
 
 import requests
 from bs4 import BeautifulSoup
+
+import config
 
 _BASE = "https://www.chrono24.com"
 _SEARCH_URL = f"{_BASE}/search/index.htm"
@@ -12,14 +16,17 @@ _HEADERS = {
 
 
 def fetch_listings(query: str, max_results: int = 50) -> list:
-    """Scrape Chrono24 search results. Returns [] if scraping fails or structure changes."""
+    """Scrape Chrono24 via ScraperAPI if key is configured, direct request otherwise."""
+    target_url = f"{_SEARCH_URL}?{urlencode({'query': query, 'dosearch': 'true'})}"
     try:
-        resp = requests.get(
-            _SEARCH_URL,
-            headers=_HEADERS,
-            params={"query": query, "dosearch": "true"},
-            timeout=10,
-        )
+        if config.SCRAPERAPI_KEY:
+            resp = requests.get(
+                "http://api.scraperapi.com/",
+                params={"api_key": config.SCRAPERAPI_KEY, "url": target_url},
+                timeout=30,
+            )
+        else:
+            resp = requests.get(target_url, headers=_HEADERS, timeout=10)
         resp.raise_for_status()
     except Exception:
         return []
@@ -47,8 +54,12 @@ def fetch_listings(query: str, max_results: int = 50) -> list:
             price_usd = float(price_digits) if price_digits else 0.0
             price_cad = round(price_usd * 1.38, 2)
 
-            img_el = article.select_one("img[src]")
-            image_url = img_el["src"] if img_el else ""
+            all_imgs = []
+            for img_el in article.select("img"):
+                src = img_el.get("data-src") or img_el.get("data-lazy-src") or img_el.get("src") or ""
+                if src and src not in all_imgs:
+                    all_imgs.append(src)
+            image_url = all_imgs[0] if all_imgs else ""
 
             results.append({
                 "id": f"chrono24-{listing_id}",
@@ -60,6 +71,7 @@ def fetch_listings(query: str, max_results: int = 50) -> list:
                 "seller_country": "",
                 "url": url,
                 "image_url": image_url,
+                "image_urls": json.dumps(all_imgs),
                 "description": "",
                 "listed_at": datetime.utcnow().strftime("%Y-%m-%d"),
                 "synced_at": datetime.utcnow().isoformat(),
