@@ -151,7 +151,7 @@ def test_kijiji_fetch_returns_standard_shape():
     assert "kijiji.ca" in listing["url"]
     assert listing["image_url"] == "https://i.ebayimg.com/00/s/abc.jpg"
     assert '"https://i.ebayimg.com/00/s/abc.jpg"' in listing["image_urls"]
-    assert "raw" in listing
+    assert listing["raw"].get("title") == "Vintage Timex Marlin"
 
 
 def test_kijiji_fetch_empty_on_feedparser_failure():

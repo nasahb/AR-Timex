@@ -69,7 +69,7 @@ def fetch_listings(query: str, max_results: int = 50) -> list:
                 "listed_at": listed_at,
                 "synced_at": datetime.utcnow().isoformat(),
                 "is_new": 1,
-                "raw": {},
+                "raw": {k: entry.get(k, "") for k in ("title", "link", "summary", "published")},
             })
         except Exception:
             continue
