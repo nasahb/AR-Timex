@@ -60,6 +60,31 @@ def init_db(conn: sqlite3.Connection) -> None:
 
         INSERT OR IGNORE INTO preferences (id) VALUES (1);
     """)
+    # Migrations for columns added after initial schema
+    migrations = [
+        "ALTER TABLE preferences ADD COLUMN search_query TEXT DEFAULT 'timex vintage'",
+        "ALTER TABLE preferences ADD COLUMN budget_cad REAL DEFAULT 50.0",
+        "ALTER TABLE preferences ADD COLUMN movement_pref TEXT DEFAULT 'Any'",
+        "ALTER TABLE preferences ADD COLUMN era_prefs TEXT DEFAULT '[]'",
+        "ALTER TABLE preferences ADD COLUMN model_prefs TEXT DEFAULT '[]'",
+        "ALTER TABLE preferences ADD COLUMN size_pref TEXT DEFAULT 'Any'",
+        "ALTER TABLE preferences ADD COLUMN exclude_nonworking INTEGER DEFAULT 1",
+        "ALTER TABLE preferences ADD COLUMN exclude_forparts INTEGER DEFAULT 1",
+        "ALTER TABLE preferences ADD COLUMN hide_international INTEGER DEFAULT 0",
+        "ALTER TABLE listings ADD COLUMN image_urls TEXT DEFAULT '[]'",
+        "ALTER TABLE listings ADD COLUMN ai_summary TEXT",
+        "ALTER TABLE listings ADD COLUMN detected_movement TEXT",
+        "ALTER TABLE listings ADD COLUMN detected_era TEXT",
+        "ALTER TABLE listings ADD COLUMN detected_model TEXT",
+        "ALTER TABLE listings ADD COLUMN detected_size TEXT",
+        "UPDATE listings SET detected_size = NULL WHERE detected_size IN ('Full-size', 'Petite', 'Unisex')",
+        "ALTER TABLE preferences ADD COLUMN kijiji_enabled INTEGER DEFAULT 1",
+    ]
+    for sql in migrations:
+        try:
+            conn.execute(sql)
+        except Exception:
+            pass
     conn.commit()
 
 
@@ -72,6 +97,11 @@ def save_listing(conn: sqlite3.Connection, listing: dict) -> None:
                    :seller_country, :url, :image_url, :description, :listed_at, :synced_at, :is_new)""",
         listing,
     )
+    conn.commit()
+
+
+def update_image_urls(conn: sqlite3.Connection, listing_id: str, urls_json: str) -> None:
+    conn.execute("UPDATE listings SET image_urls=? WHERE id=?", (urls_json, listing_id))
     conn.commit()
 
 
@@ -99,7 +129,16 @@ def save_preferences(conn: sqlite3.Connection, prefs: dict) -> None:
            threshold = :threshold,
            ebay_enabled = :ebay_enabled,
            etsy_enabled = :etsy_enabled,
-           chrono24_enabled = :chrono24_enabled
+           chrono24_enabled = :chrono24_enabled,
+           kijiji_enabled = :kijiji_enabled,
+           search_query = :search_query,
+           budget_cad = :budget_cad,
+           movement_pref = :movement_pref,
+           size_pref = :size_pref,
+           era_prefs = :era_prefs,
+           model_prefs = :model_prefs,
+           exclude_nonworking = :exclude_nonworking,
+           exclude_forparts = :exclude_forparts
            WHERE id = 1""",
         prefs,
     )
@@ -116,9 +155,35 @@ def save_score(conn: sqlite3.Connection, score: dict) -> None:
     conn.commit()
 
 
+def get_unenriched_ids(conn: sqlite3.Connection) -> list:
+    rows = conn.execute(
+        "SELECT id FROM listings WHERE ai_summary IS NULL OR detected_size IS NULL"
+    ).fetchall()
+    return [r["id"] for r in rows]
+
+
+def save_enrichment(conn: sqlite3.Connection, listing_id: str, result: dict) -> None:
+    conn.execute(
+        """UPDATE listings SET
+           ai_summary = ?, detected_movement = ?, detected_era = ?, detected_model = ?, detected_size = ?
+           WHERE id = ?""",
+        (
+            result.get("summary"),
+            result.get("movement"),
+            result.get("era"),
+            result.get("model"),
+            result.get("size"),
+            listing_id,
+        ),
+    )
+    conn.commit()
+
+
 def get_unscored_ids(conn: sqlite3.Connection) -> list:
     rows = conn.execute(
-        "SELECT id FROM listings WHERE id NOT IN (SELECT listing_id FROM scores)"
+        """SELECT id FROM listings
+           WHERE ai_summary IS NOT NULL
+             AND id NOT IN (SELECT listing_id FROM scores)"""
     ).fetchall()
     return [r["id"] for r in rows]
 
@@ -130,14 +195,12 @@ def get_listing_by_id(conn: sqlite3.Connection, listing_id: str):
 
 def get_feed_listings(conn: sqlite3.Connection) -> list:
     rows = conn.execute(
-        """SELECT l.*, s.taste_score, s.value_score, s.freshness_score,
-                  s.final_score, s.model_id, s.reason,
+        """SELECT l.*,
                   CASE WHEN f.listing_id IS NOT NULL THEN 1 ELSE 0 END as is_favourite
            FROM listings l
-           LEFT JOIN scores s ON l.id = s.listing_id
            LEFT JOIN favourites f ON l.id = f.listing_id
            WHERE l.id NOT IN (SELECT listing_id FROM dismissed)
-           ORDER BY COALESCE(s.final_score, 0) DESC"""
+           ORDER BY l.listed_at DESC"""
     ).fetchall()
     return [dict(r) for r in rows]
 
@@ -177,6 +240,15 @@ def get_favourites(conn: sqlite3.Connection) -> list:
            ORDER BY f.favourited_at DESC"""
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def get_source_counts(conn: sqlite3.Connection) -> dict:
+    rows = conn.execute(
+        """SELECT source, COUNT(*) as cnt FROM listings
+           WHERE id NOT IN (SELECT listing_id FROM dismissed)
+           GROUP BY source"""
+    ).fetchall()
+    return {r["source"]: r["cnt"] for r in rows}
 
 
 def get_last_synced(conn: sqlite3.Connection):

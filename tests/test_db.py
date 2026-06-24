@@ -63,11 +63,26 @@ def test_preferences_default(conn):
 
 
 def test_save_preferences(conn):
-    save_preferences(conn, {"taste_description": "I love Marlins", "threshold": 8.0,
-                             "ebay_enabled": 1, "etsy_enabled": 0, "chrono24_enabled": 1})
+    save_preferences(conn, {
+        "taste_description": "I love Marlins",
+        "threshold": 8.0,
+        "ebay_enabled": 1,
+        "etsy_enabled": 0,
+        "chrono24_enabled": 1,
+        "kijiji_enabled": 1,
+        "search_query": "timex vintage",
+        "budget_cad": 50.0,
+        "movement_pref": "Any",
+        "size_pref": "Any",
+        "era_prefs": "[]",
+        "model_prefs": "[]",
+        "exclude_nonworking": 1,
+        "exclude_forparts": 1,
+    })
     prefs = get_preferences(conn)
     assert prefs["taste_description"] == "I love Marlins"
     assert prefs["threshold"] == 8.0
+    assert prefs["kijiji_enabled"] == 1
 
 
 def test_save_score_and_unscored(conn):
