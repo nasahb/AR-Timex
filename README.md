@@ -20,9 +20,9 @@ Vintage Timex hunting is a timing problem. Good listings — correct dial condit
 
 **Phase 4 — AI enrichment.** `enricher.py` sends each new listing to Claude Haiku to produce: a 4–6 sentence editorial summary covering condition, movement, dial, strap, and any red flags; and structured fields for movement type, era, model, and size. This runs concurrently (8 workers) after each sync so it doesn't block the UI.
 
-**Phase 5 — UI.** Streamlit (`app.py`) renders a feed of enriched listings with sidebar filters (price, source, movement, era, model), pagination, a card modal with the AI summary, and a shortlist. The visual design is intentionally editorial — Newsreader serif for display, Geist for UI chrome, near-black on near-white.
+**Phase 5 — UI.** Streamlit (`app.py`) renders a feed of enriched listings with sidebar filters (movement, size, era, model, budget, source, search query), pagination, a card modal with the AI summary, and a shortlist. The visual design is intentionally editorial — Newsreader serif for display, Geist for UI chrome, near-black on near-white.
 
-**Sync.** Triggered manually via the "Sync now" button in the top nav. APScheduler is a dependency but background scheduling is not wired up in the current build — that's a planned next step.
+**Sync.** Triggered manually via the "Sync now" button in the top nav.
 
 Full design rationale lives in [`docs/superpowers/specs/2026-06-23-timex-aggregator-design.md`](docs/superpowers/specs/2026-06-23-timex-aggregator-design.md). The implementation plan is in [`docs/superpowers/plans/2026-06-23-timex-aggregator.md`](docs/superpowers/plans/2026-06-23-timex-aggregator.md).
 
@@ -67,14 +67,14 @@ Enrichment runs concurrently after each sync using a thread pool. The UI shows t
 | eBay | Browse API (OAuth) | Official API, EBAY_CA marketplace, watches category |
 | Etsy | HTML scraper | No public API; degrades gracefully to empty list |
 | Chrono24 | JSON-LD scraper | Parses structured data embedded in search page |
-| Kijiji | Stub | Dropped RSS support; returns `[]` until viable fetch path found |
+| Kijiji | Disabled | Dropped RSS support; returns `[]` and is excluded from syncs until a viable fetch path is found |
 
 ## Tradeoffs
 
 - **Etsy and Chrono24 use scrapers, not official APIs.** No public API available for either. The adapter pattern means swapping to official APIs later is a one-file change.
 - **No authentication.** This runs locally for one user. Multi-user support would require a backend and sessions — out of scope.
 - **USD → CAD conversion uses a fixed rate (1.38).** Good enough for a $50 CAD budget threshold; a live rate API would be the v2 upgrade.
-- **Kijiji is stubbed out.** Kijiji dropped RSS support and serves JS-rendered HTML with no viable free fetch path.
+- **Kijiji is disabled.** Kijiji dropped RSS support and serves JS-rendered HTML with no viable free fetch path. The adapter exists but is excluded from syncs.
 
 ## Running locally
 
@@ -88,7 +88,7 @@ pip install -r requirements.txt
 
 # 3. Add your API keys
 cp .env.example .env
-# Edit .env and add your keys (see table below)
+# Fill in ANTHROPIC_API_KEY, EBAY_APP_ID, EBAY_APP_SECRET
 
 # 4. Run
 streamlit run app.py
