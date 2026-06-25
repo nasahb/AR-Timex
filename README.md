@@ -22,7 +22,7 @@ Vintage Timex hunting is a timing problem. Good listings — correct dial condit
 
 **Phase 5 — UI.** Streamlit (`app.py`) renders a feed of enriched listings with sidebar filters (price, source, movement, era, model), pagination, a card modal with the AI summary, and a shortlist. The visual design is intentionally editorial — Newsreader serif for display, Geist for UI chrome, near-black on near-white.
 
-**Sync schedule.** APScheduler runs a background sync every 30 minutes. The UI also exposes a manual "Sync now" button in the top nav.
+**Sync.** Triggered manually via the "Sync now" button in the top nav. APScheduler is a dependency but background scheduling is not wired up in the current build — that's a planned next step.
 
 Full design rationale lives in [`docs/superpowers/specs/2026-06-23-timex-aggregator-design.md`](docs/superpowers/specs/2026-06-23-timex-aggregator-design.md). The implementation plan is in [`docs/superpowers/plans/2026-06-23-timex-aggregator.md`](docs/superpowers/plans/2026-06-23-timex-aggregator.md).
 
@@ -30,7 +30,7 @@ Full design rationale lives in [`docs/superpowers/specs/2026-06-23-timex-aggrega
 
 ## What it does
 
-- Fetches listings from **eBay, Etsy, Chrono24, and Kijiji** on a 30-minute schedule
+- Fetches listings from **eBay, Etsy, Chrono24, and Kijiji** on demand via a Sync button
 - Cuts obvious junk in a fast keyword pass before any AI is involved
 - Uses **Claude Haiku** to enrich each listing with a summary and structured attributes
 - Surfaces results in a clean **Streamlit UI** with sidebar filters, pagination, and a shortlist
@@ -94,7 +94,7 @@ cp .env.example .env
 streamlit run app.py
 ```
 
-The app auto-syncs on first load. Use the **Sync now** button in the top nav to trigger a manual fetch at any time.
+Use the **Sync now** button in the top nav to fetch new listings.
 
 ## Environment variables
 
