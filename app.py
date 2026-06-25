@@ -954,16 +954,16 @@ def render_candidate_card(listing, conn):
     st.markdown(
         f'<div style="{_ab}">'
         f'  <a href="{url}" style="{_base}flex:2;border-right:1px solid rgba(17,17,16,0.10);background:#111110;color:#FAFAF8;" target="_blank">View listing</a>'
-        f'  <button id="edfav-{lid}" style="{_base}flex:1;border-right:1px solid rgba(17,17,16,0.10);color:#928E89;">{fav_label}</button>'
-        f'  <button id="eddis-{lid}" style="{_base}flex:1;color:#928E89;">Dismiss</button>'
+        f'  <button id="ccfav-{lid}" style="{_base}flex:1;border-right:1px solid rgba(17,17,16,0.10);color:#928E89;">{fav_label}</button>'
+        f'  <button id="ccdis-{lid}" style="{_base}flex:1;color:#928E89;">Dismiss</button>'
         f'</div>',
         unsafe_allow_html=True,
     )
-    if st.button(f"EDFAV_{lid}", key=f"edfav_{lid}"):
+    if st.button(f"CCFAV_{lid}", key=f"ccfav_{lid}"):
         toggle_favourite(conn, lid)
         st.session_state["fav_count"] = conn.execute("SELECT COUNT(*) FROM favourites").fetchone()[0]
         st.rerun()
-    if st.button(f"EDDIS_{lid}", key=f"eddis_{lid}"):
+    if st.button(f"CCDIS_{lid}", key=f"ccdis_{lid}"):
         dismiss_listing(conn, lid)
         st.rerun()
 
@@ -1525,67 +1525,6 @@ def render_feed(conn, new_count):
 
 # ── favourites ────────────────────────────────────────────────────────────────
 
-def _inject_shortlist_js(lids: list):
-    """Wire all shortlist card action buttons in one iframe — same pattern as _inject_card_js."""
-    if not lids:
-        return
-    lids_js = json.dumps(lids)
-    components.html(f"""<script>
-(function() {{
-  var p = window.parent.document;
-
-  function clickHidden(text) {{
-    p.querySelectorAll('button').forEach(function(b) {{
-      if (b.textContent.trim() === text) b.click();
-    }});
-  }}
-
-  function hideControlButtons() {{
-    p.querySelectorAll('button').forEach(function(b) {{
-      var t = b.textContent.trim();
-      if (t.startsWith('EDFAV_') || t.startsWith('EDDIS_')) {{
-        var el = b;
-        for (var i = 0; i < 6; i++) {{
-          if (!el.parentElement) break;
-          el = el.parentElement;
-          var ti = el.getAttribute('data-testid') || '';
-          if (ti === 'stBaseButtonContainer' || ti === 'stButton' || ti === 'element-container') {{
-            el.style.cssText = 'display:none!important;height:0;overflow:hidden;margin:0;padding:0;';
-            break;
-          }}
-        }}
-        b.style.cssText = 'display:none!important;';
-      }}
-    }});
-  }}
-
-  hideControlButtons();
-  [100, 300, 700, 1500].forEach(function(t) {{ setTimeout(hideControlButtons, t); }});
-
-  function wireCards() {{
-    var wired = 0;
-    {lids_js}.forEach(function(lid) {{
-      var fav = p.getElementById('edfav-' + lid);
-      var dis = p.getElementById('eddis-' + lid);
-      if (!fav || !dis || fav._edWired) return;
-      fav._edWired = true;
-      wired++;
-      fav.addEventListener('click', function() {{ clickHidden('EDFAV_' + lid); }});
-      dis.addEventListener('click', function() {{ clickHidden('EDDIS_' + lid); }});
-    }});
-    return wired;
-  }}
-
-  var wireAttempts = 0;
-  function tryWire() {{
-    if (wireCards() > 0 || wireAttempts++ > 25) return;
-    setTimeout(tryWire, 80);
-  }}
-  tryWire();
-}})();
-</script>""", height=0)
-
-
 def render_favourites(conn):
     favs_all = get_favourites(conn)
     n = len(favs_all)
@@ -1616,7 +1555,7 @@ def render_favourites(conn):
         render_candidate_card(listing, conn)
         lids.append(listing["id"])
 
-    _inject_shortlist_js(lids)
+    _inject_card_js(lids)
 
 
 # ── entry point ───────────────────────────────────────────────────────────────
