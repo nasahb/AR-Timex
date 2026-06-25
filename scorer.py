@@ -5,51 +5,65 @@ import anthropic
 
 import config
 
+_SCORING_PROMPT = """You are scoring how well a watch listing matches a collector's specific stated preferences.
 
-_SCORING_PROMPT = """You are helping a vintage watch collector find listings that match their taste.
+SCORING RULES — follow these strictly:
+1. The collector's written taste description is the ONLY thing that determines the score.
+2. Reference watches are context only — do NOT score higher just because a listing resembles them.
+3. If the collector specifies features (e.g. "silver band", "collab", "original dial"), the listing MUST show evidence of those features to score above 5. Absence of a stated preference = penalise hard.
+4. Score 8–10 only if the listing explicitly matches most or all stated preferences.
+5. Score 3–5 if the listing is a reasonable vintage Timex but doesn't satisfy the stated preferences.
+6. Score 1–2 if the stated preferences are clearly absent.
 
-The collector loves these three reference watches:
-{references}
-
+Collector's taste (PRIMARY criterion):
 {taste_section}
 
-Score this listing:
-Title: {title}
-Description: {description}
-Price: ${total_cad:.2f} CAD total
-Source: {source}
+Reference watches for context only:
+{references}
 
-Return JSON only — no markdown, no explanation, just the JSON object:
+Listing snapshot:
+{ai_summary}
+
+Price: ${total_cad:.2f} CAD
+
+Return JSON only — no markdown, no explanation:
 {{
   "taste_score": <integer 0-10>,
-  "model_id": <"Marlin" | "Weekender" | "Expedition" | "Electric" | "Ironman" | "Easy Reader" | null>,
-  "reason": "<one sentence in plain English explaining the score>"
-}}
-
-Scoring guide:
-- 9-10: Closely matches references (70s/80s mechanical or electric, clean dial, original bracelet)
-- 7-8: Strong vintage Timex, good condition signals
-- 5-6: Decent vintage Timex but not an obvious taste match
-- 3-4: Timex but wrong era or style
-- 1-2: Poor match for this collector
-- 0: Not a Timex or clearly wrong item"""
+  "reason": "<one sentence: name the specific preference(s) that match or are missing>"
+}}"""
 
 
-def score_with_ai(listing: dict, taste_description: str) -> dict:
-    """Call Claude Haiku to score a single listing. Returns taste_score, model_id, reason."""
+def _build_taste_section(prefs: dict) -> str:
+    lines = []
+    movement = prefs.get("movement_pref", "Any")
+    if movement and movement != "Any":
+        lines.append(f"- Movement: {movement} only")
+    era_list = json.loads(prefs.get("era_prefs") or "[]")
+    if era_list:
+        lines.append(f"- Era: {', '.join(era_list)}")
+    model_list = json.loads(prefs.get("model_prefs") or "[]")
+    if model_list:
+        lines.append(f"- Preferred models: {', '.join(model_list)}")
+    taste = (prefs.get("taste_description") or "").strip()
+    if taste:
+        lines.append(f"- In their own words: \"{taste}\"")
+    return "\n".join(lines) if lines else "No specific preferences — score on general vintage Timex quality."
+
+
+def score_with_ai(listing: dict, prefs: dict) -> dict:
+    ai_summary = (listing.get("ai_summary") or "").strip()
+    if not ai_summary:
+        # Fallback for listings not yet enriched
+        ai_summary = f"{listing.get('title', '')}. {(listing.get('description', '') or '')[:300]}"
+
     references = "\n".join(
         f"- {w['title']}: {w['description']}" for w in config.REFERENCE_WATCHES
     )
-    taste_section = (
-        f"The collector also says: \"{taste_description}\"" if taste_description.strip() else ""
-    )
     prompt = _SCORING_PROMPT.format(
         references=references,
-        taste_section=taste_section,
-        title=listing.get("title", ""),
-        description=(listing.get("description", "") or "")[:500],
+        taste_section=_build_taste_section(prefs),
+        ai_summary=ai_summary,
         total_cad=listing.get("total_cad", 0.0),
-        source=listing.get("source", ""),
     )
 
     client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
@@ -59,52 +73,41 @@ def score_with_ai(listing: dict, taste_description: str) -> dict:
         messages=[{"role": "user", "content": prompt}],
     )
     raw = response.content[0].text.strip()
+    if raw.startswith("```"):
+        lines = raw.splitlines()
+        raw = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+    if not raw:
+        raise ValueError("Empty response from AI scorer")
     return json.loads(raw)
 
 
-def compute_composite(taste_score: float, total_cad: float, listed_at: str) -> dict:
-    """Compute value_score, freshness_score, and final_score."""
-    value_score = max(0.0, (config.BUDGET_CAD - total_cad) / config.BUDGET_CAD * 10)
-
+def compute_composite(taste_score: float, listed_at: str) -> float:
     try:
         listed_date = datetime.strptime(listed_at, "%Y-%m-%d")
     except (ValueError, TypeError):
         listed_date = datetime.utcnow() - timedelta(days=3)
-
     age_hours = (datetime.utcnow() - listed_date).total_seconds() / 3600
-    freshness_score = 10 if age_hours < 24 else (7 if age_hours < 72 else 4)
-
-    final_score = (taste_score * 0.6) + (value_score * 0.3) + (freshness_score * 0.1)
-
-    return {
-        "value_score": round(value_score, 2),
-        "freshness_score": freshness_score,
-        "final_score": round(final_score, 2),
-    }
+    freshness = 10 if age_hours < 24 else (7 if age_hours < 72 else 4)
+    return round(taste_score * 0.9 + freshness * 0.1, 2)
 
 
-def score_and_store(conn, listing_id: str, taste_description: str) -> None:
-    """Fetch listing from DB, score with AI, compute composite, save result."""
+def score_and_store(conn, listing_id: str, prefs: dict) -> None:
     from db import get_listing_by_id, save_score
-
     listing = get_listing_by_id(conn, listing_id)
     if not listing:
         return
-
-    ai_result = score_with_ai(listing, taste_description)
-    composite = compute_composite(
+    ai_result = score_with_ai(listing, prefs)
+    final_score = compute_composite(
         taste_score=float(ai_result["taste_score"]),
-        total_cad=listing.get("total_cad") or listing.get("price", 0.0),
         listed_at=listing.get("listed_at", ""),
     )
-
     save_score(conn, {
         "listing_id": listing_id,
         "taste_score": float(ai_result["taste_score"]),
-        "value_score": composite["value_score"],
-        "freshness_score": composite["freshness_score"],
-        "final_score": composite["final_score"],
-        "model_id": ai_result.get("model_id"),
+        "value_score": None,
+        "freshness_score": None,
+        "final_score": final_score,
+        "model_id": listing.get("detected_model") or ai_result.get("model_id"),
         "reason": ai_result.get("reason", ""),
         "scored_at": datetime.utcnow().isoformat(),
     })

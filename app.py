@@ -166,20 +166,6 @@ html, body, [data-testid="stApp"] {
 .block-container { padding-top: 3rem !important; padding-bottom: 4rem !important; max-width: 820px !important; }
 hr { border-color: var(--border) !important; }
 
-/* Pills — rectangular all-caps */
-[data-testid="stPillsInputButton"],
-[data-testid="stPillsInput"] button,
-[data-testid="stPillsGroup"] button,
-section[data-testid="stSidebar"] [role="group"] button {
-  font-family: 'Geist', sans-serif !important;
-  font-size: 0.45rem !important;
-  letter-spacing: 0.07em !important;
-  text-transform: uppercase !important;
-  border-radius: 3px !important;
-  padding: 5px 10px !important;
-  font-weight: 400 !important;
-}
-
 /* Info / Alert */
 [data-testid="stAlert"] {
   background: var(--surface) !important;
@@ -376,18 +362,6 @@ def render_sidebar(conn):
 
     with st.sidebar:
         sans = "font-family:'Geist',sans-serif;"
-        st.markdown("""<style>
-[data-testid="stPillsInputButton"],
-[data-testid="stPillsInput"] button,
-section[data-testid="stSidebar"] [role="group"] button {
-  border-radius: 3px !important;
-  text-transform: uppercase !important;
-  font-size: 0.45rem !important;
-  letter-spacing: 0.07em !important;
-  font-weight: 400 !important;
-  padding: 5px 10px !important;
-}
-</style>""", unsafe_allow_html=True)
         st.markdown(
             f'<div style="margin-bottom:16px;">'
             f'  <div style="display:flex; align-items:center; margin-bottom:2px;">'
@@ -670,34 +644,6 @@ section[data-testid="stSidebar"] div[data-testid="InputInstructions"]::after {
 })();
 </script>""", height=1)
 
-        # Style pills — inject a script into the parent document so it runs in parent context
-        components.html("""<script>
-(function(){
-  var p=window.parent.document;
-  if(p._timexPillInterval)clearInterval(p._timexPillInterval);
-  function stylePills(){
-    var sb=p.querySelector('section[data-testid="stSidebar"]');
-    if(!sb)return;
-    sb.querySelectorAll('button').forEach(function(b){
-      var t=b.textContent.trim();
-      var bid=b.id||'';
-      if(t==='SBSUGGEST'||t==='TASTEAND'||t==='TASTEOR')return;
-      if(bid.indexOf('taste-')===0)return;
-      var sel=b.getAttribute('aria-checked')==='true'||b.getAttribute('aria-selected')==='true'||b.getAttribute('aria-pressed')==='true';
-      b.style.setProperty('font-size','7px','important');
-      b.style.setProperty('border-radius','3px','important');
-      b.style.setProperty('text-transform','uppercase','important');
-      b.style.setProperty('letter-spacing','0.07em','important');
-      b.style.setProperty('font-weight','400','important');
-      b.style.setProperty('font-family',"'Geist',sans-serif",'important');
-      b.style.setProperty('padding','4px 8px','important');
-      if(!sel)b.style.setProperty('color','#4A4744','important');
-    });
-  }
-  stylePills();
-  p._timexPillInterval=setInterval(stylePills,150);
-})();
-</script>""", height=0)
 
         st.markdown("<div style='margin-bottom:20px;'></div>", unsafe_allow_html=True)
 
@@ -726,9 +672,6 @@ section[data-testid="stSidebar"] div[data-testid="InputInstructions"]::after {
             st.session_state["sb_c24"] = bool(prefs.get("chrono24_enabled", 1))
         c24_on = st.checkbox("Chrono24", key="sb_c24")
 
-        if "sb_kijiji" not in st.session_state:
-            st.session_state["sb_kijiji"] = bool(prefs.get("kijiji_enabled", 1))
-        kijiji_on = st.checkbox("Kijiji", key="sb_kijiji")
         st.markdown("<div style='margin-bottom:20px;'></div>", unsafe_allow_html=True)
 
         if "sb_search_query" not in st.session_state:
@@ -745,7 +688,7 @@ section[data-testid="stSidebar"] div[data-testid="InputInstructions"]::after {
             "ebay_enabled": int(ebay_on),
             "etsy_enabled": int(etsy_on),
             "chrono24_enabled": int(c24_on),
-            "kijiji_enabled": int(kijiji_on),
+            "kijiji_enabled": 0,
             "search_query": search_query,
             "budget_cad": float(budget_cad),
             "movement_pref": json.dumps(movement_pref) if isinstance(movement_pref, list) else (movement_pref or "Any"),
@@ -795,6 +738,7 @@ section[data-testid="stSidebar"] div[data-testid="InputInstructions"]::after {
       display: flex; align-items: center;
       justify-content: space-between; padding: 0 48px;
       z-index: 100; box-sizing: border-box;
+      transition: left 200ms ease;
     }}
     .t-nav {{ display: flex; gap: 28px; align-items: center; }}
     .t-btn {{
@@ -856,6 +800,17 @@ section[data-testid="stSidebar"] div[data-testid="InputInstructions"]::after {
   p.getElementById('ts-feed').addEventListener('click', function() {{ clickSidebarBtn('NAVFEED'); }});
   p.getElementById('ts-favs').addEventListener('click', function() {{ clickSidebarBtn('NAVFAVS'); }});
   p.getElementById('ts-sync').addEventListener('click', function() {{ clickSidebarBtn('Sync now'); }});
+
+  // Adjust strip left when sidebar collapses/expands
+  function syncStripLeft() {{
+    var sb = p.querySelector('[data-testid="stSidebar"]');
+    var s = p.getElementById('timex-strip');
+    if (!sb || !s) return;
+    s.style.left = sb.getAttribute('aria-expanded') === 'false' ? '0px' : '380px';
+  }}
+  syncStripLeft();
+  var sb = p.querySelector('[data-testid="stSidebar"]');
+  if (sb) new MutationObserver(syncStripLeft).observe(sb, {{attributes: true, attributeFilter: ['aria-expanded']}});
 }})();
 </script>""", height=1)
 

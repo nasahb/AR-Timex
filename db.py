@@ -200,7 +200,7 @@ def get_feed_listings(conn: sqlite3.Connection) -> list:
            FROM listings l
            LEFT JOIN favourites f ON l.id = f.listing_id
            WHERE l.id NOT IN (SELECT listing_id FROM dismissed)
-           ORDER BY l.listed_at DESC"""
+           ORDER BY l.listed_at DESC, l.synced_at DESC"""
     ).fetchall()
     return [dict(r) for r in rows]
 

@@ -3,99 +3,70 @@ import re
 from datetime import datetime
 
 import requests
-from bs4 import BeautifulSoup
 
-_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    ),
-    "Accept-Language": "en-CA,en;q=0.9",
-}
+
+def _hires(url: str) -> str:
+    if not url:
+        return url
+    return re.sub(r'il_\d+x[Nn\d]+\.', 'il_1588xN.', url)
+
+import config
+
+_SCRAPER_ID = "3b1c0fe9-5232-41f9-81c3-d8346c37039c"
+_BASE_URL = f"https://api.parse.bot/scraper/{_SCRAPER_ID}"
 
 
 def fetch_listings(query: str, max_results: int = 50) -> list:
-    """Scrape Etsy search results. Returns [] if JS rendering prevents parsing."""
+    if not config.PARSE_API_KEY:
+        return []
+
     try:
-        resp = requests.get(
-            "https://www.etsy.com/ca/search",
-            headers=_HEADERS,
-            params={"q": query, "explicit": "1"},
-            timeout=10,
+        resp = requests.post(
+            f"{_BASE_URL}/search_listings",
+            headers={"X-API-Key": config.PARSE_API_KEY},
+            json={"query": query},
+            timeout=15,
         )
         resp.raise_for_status()
+        data = resp.json()
     except Exception:
         return []
 
     results = []
-    try:
-        soup = BeautifulSoup(resp.text, "html.parser")
+    for item in (data.get("data") or {}).get("items", [])[:max_results]:
+        lid = item.get("listing_id", "")
+        try:
+            price_usd = float(str(item.get("price") or 0).replace(",", ""))
+        except (ValueError, TypeError):
+            price_usd = 0.0
+        price_cad = round(price_usd * 1.38, 2)
 
-        # Try JSON-LD structured data first — most reliable when present
-        for script in soup.find_all("script", type="application/ld+json"):
-            try:
-                data = json.loads(script.string or "")
-                if data.get("@type") == "ItemList":
-                    for el in data.get("itemListElement", [])[:max_results]:
-                        item = el.get("item", {})
-                        offer = (item.get("offers") or [{}])[0]
-                        price_usd = float(offer.get("price", 0))
-                        price_cad = round(price_usd * 1.38, 2)
-                        url = item.get("url", "")
-                        lid_match = re.search(r"/listing/(\d+)", url)
-                        lid = lid_match.group(1) if lid_match else url
-                        results.append({
-                            "id": f"etsy-{lid}",
-                            "source": "etsy",
-                            "title": item.get("name", ""),
-                            "price": price_cad,
-                            "shipping": None,
-                            "shipping_confirmed": False,
-                            "seller_country": "",
-                            "url": url,
-                            "image_url": item.get("image", ""),
-                            "description": item.get("description", "")[:500],
-                            "listed_at": datetime.utcnow().strftime("%Y-%m-%d"),
-                            "synced_at": datetime.utcnow().isoformat(),
-                            "is_new": 1,
-                            "raw": item,
-                        })
-                    if results:
-                        return results
-            except Exception:
-                continue
+        # Try to collect all available images from the API response
+        raw_imgs = item.get("images") or item.get("additional_images") or []
+        if isinstance(raw_imgs, list) and raw_imgs:
+            all_imgs = [_hires(u) for u in raw_imgs if isinstance(u, str) and u]
+        else:
+            all_imgs = []
+        primary_img = _hires(item.get("image", ""))
+        if primary_img and primary_img not in all_imgs:
+            all_imgs.insert(0, primary_img)
 
-        # Fallback: parse data attributes on listing containers
-        for card in soup.select("[data-listing-id]")[:max_results]:
-            try:
-                lid = card.get("data-listing-id", "")
-                title = card.get("data-listing-title", "") or card.get_text(strip=True)[:80]
-                price_str = card.get("data-listing-price", "0")
-                price_usd = float(re.sub(r"[^\d.]", "", price_str) or 0)
-                price_cad = round(price_usd * 1.38, 2)
-                link = card.select_one("a[href]")
-                url = link["href"] if link else ""
-                img = card.select_one("img[src]")
-                image_url = img["src"] if img else ""
-                results.append({
-                    "id": f"etsy-{lid}",
-                    "source": "etsy",
-                    "title": title,
-                    "price": price_cad,
-                    "shipping": None,
-                    "shipping_confirmed": False,
-                    "seller_country": "",
-                    "url": url,
-                    "image_url": image_url,
-                    "description": "",
-                    "listed_at": datetime.utcnow().strftime("%Y-%m-%d"),
-                    "synced_at": datetime.utcnow().isoformat(),
-                    "is_new": 1,
-                    "raw": {"listing_id": lid},
-                })
-            except Exception:
-                continue
-    except Exception:
-        pass
+        results.append({
+            "id": f"etsy-{lid}",
+            "source": "etsy",
+            "title": item.get("name", ""),
+            "price": price_cad,
+            "shipping": None,
+            "shipping_confirmed": False,
+            "seller_country": "",
+            "url": item.get("url", ""),
+            "image_url": primary_img,
+            "image_urls": json.dumps(all_imgs),
+            "description": item.get("description") or "",
+            "listed_at": datetime.utcnow().strftime("%Y-%m-%d"),
+            "synced_at": datetime.utcnow().isoformat(),
+            "is_new": 1,
+            "raw": item,
+        })
 
     return results
