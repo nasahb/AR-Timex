@@ -103,6 +103,7 @@ Use the **Sync now** button in the top nav to fetch new listings.
 | `ANTHROPIC_API_KEY` | Yes | Claude Haiku for AI enrichment |
 | `EBAY_APP_ID` | Yes | eBay Browse API authentication |
 | `EBAY_APP_SECRET` | Yes | eBay Browse API authentication |
+| `PARSE_API_KEY` | No | Etsy listings via parse.bot — omit to skip Etsy |
 | `SCRAPERAPI_KEY` | No | Proxy for Chrono24 — improves reliability |
 
 ## What I'd build next
