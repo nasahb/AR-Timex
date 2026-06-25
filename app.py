@@ -674,7 +674,7 @@ section[data-testid="stSidebar"] div[data-testid="InputInstructions"]::after {
             st.session_state.view = "favourites"
             st.rerun()
 
-        fav_count = len(favs)
+        fav_count = st.session_state.get("fav_count", len(favs))
         fav_nav = f"Shortlist ({fav_count})" if fav_count else "Shortlist"
         current_view = st.session_state.get("view", "feed")
         feed_active = "t-active" if current_view == "feed" else ""
@@ -943,8 +943,9 @@ def render_candidate_card(listing, conn):
         unsafe_allow_html=True,
     )
 
-    fav_label = "Save" if not listing.get("is_favourite") else "Saved"
     url = listing.get("url", "#")
+    is_fav = bool(listing.get("is_favourite"))
+    fav_label = "Saved" if is_fav else "Save"
     _ab  = "display:flex;border:1px solid rgba(17,17,16,0.10);margin-top:8px;"
     _base = ("font-family:'Geist',sans-serif;font-size:0.6875rem;letter-spacing:0.08em;"
              "text-transform:uppercase;background:none;border:none;cursor:pointer;"
@@ -960,6 +961,7 @@ def render_candidate_card(listing, conn):
     )
     if st.button(f"EDFAV_{lid}", key=f"edfav_{lid}"):
         toggle_favourite(conn, lid)
+        st.session_state["fav_count"] = conn.execute("SELECT COUNT(*) FROM favourites").fetchone()[0]
         st.rerun()
     if st.button(f"EDDIS_{lid}", key=f"eddis_{lid}"):
         dismiss_listing(conn, lid)
@@ -972,6 +974,9 @@ def render_candidate_card(listing, conn):
       if (b.textContent.trim() === text) b.click();
     }});
   }}
+  var _srOnly = 'position:absolute!important;width:1px!important;height:1px!important;' +
+                'padding:0!important;margin:-1px!important;overflow:hidden!important;' +
+                'clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important;';
   function hideControlButtons() {{
     ['EDFAV_{lid}', 'EDDIS_{lid}'].forEach(function(label) {{
       p.querySelectorAll('button').forEach(function(b) {{
@@ -982,11 +987,11 @@ def render_candidate_card(listing, conn):
             el = el.parentElement;
             var ti = el.getAttribute('data-testid') || '';
             if (ti === 'stBaseButtonContainer' || ti === 'stButton' || ti === 'element-container') {{
-              el.style.cssText = 'display:none!important;height:0;overflow:hidden;margin:0;padding:0;';
+              el.style.cssText = _srOnly;
               break;
             }}
           }}
-          b.style.cssText = 'display:none!important;';
+          b.style.cssText = _srOnly;
         }}
       }});
     }});
@@ -1009,7 +1014,6 @@ def render_candidate_card(listing, conn):
   wireCard();
 }})();
 </script>""", height=0)
-    st.write("")
 
 
 # ── listing modal ─────────────────────────────────────────────────────────────
@@ -1100,6 +1104,7 @@ def _show_listing_modal(listing, conn):
     # Hidden Streamlit buttons wired up by JS below
     if st.button(f"MMFAV_{lid}", key=f"mmfav_{lid}"):
         toggle_favourite(conn, lid)
+        st.session_state["fav_count"] = conn.execute("SELECT COUNT(*) FROM favourites").fetchone()[0]
         st.rerun()
     if st.button(f"MMDIS_{lid}", key=f"mmdis_{lid}"):
         dismiss_listing(conn, lid)
@@ -1231,6 +1236,7 @@ def render_compact_card(listing, conn):
         _show_listing_modal(listing, conn)
     if st.button(f"CCFAV_{lid}", key=f"ccfav_{lid}"):
         toggle_favourite(conn, lid)
+        st.session_state["fav_count"] = conn.execute("SELECT COUNT(*) FROM favourites").fetchone()[0]
         st.rerun()
     if st.button(f"CCDIS_{lid}", key=f"ccdis_{lid}"):
         dismiss_listing(conn, lid)
@@ -1609,6 +1615,8 @@ def main():
         st.session_state.view = "feed"
     if "new_count" not in st.session_state:
         st.session_state.new_count = get_new_count(conn)
+    # Always refresh fav_count from DB so the nav badge stays accurate
+    st.session_state["fav_count"] = conn.execute("SELECT COUNT(*) FROM favourites").fetchone()[0]
 
     render_sidebar(conn)
 
