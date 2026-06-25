@@ -1,10 +1,38 @@
 # Timex Watch Finder
 
-A vintage Timex aggregator built to solve a real problem: good listings across multiple marketplaces sell fast and finding them manually takes too long. The taste profile is anchored to three reference watches from the brief — a 1972 Marlin, a second Marlin, and a 1960s Electric — so the AI has something concrete to score against.
+## Build Plan
+
+### What I'm building
+
+A personal vintage Timex aggregator. It pulls listings from eBay, Etsy, Chrono24, and Kijiji, filters out the junk automatically, and uses Claude AI to score each remaining listing against a defined taste profile. Results surface in a Streamlit UI where I can browse, filter, save, and act on good finds quickly.
+
+### Why
+
+Vintage Timex hunting is a timing problem. Good listings — correct dial condition, right model, reasonable price — appear and sell within hours across four different marketplaces. Checking all of them manually every day means either missing things or spending time I don't want to spend. The collector has three specific reference watches that define "interesting" (a 1972 Marlin, a second Marlin variant, a 1960s Electric). The taste is defined; what's missing is automation.
+
+### How
+
+**Phase 1 — Data layer.** Four marketplace adapters (`adapters/`) each expose one function: `fetch_listings(query, max_results)`. eBay uses RSS (no auth needed), Etsy and Chrono24 use HTML scraping, Kijiji is stubbed pending a viable fetch path. All adapters return listings in a standard dict format so the rest of the system doesn't care which marketplace a listing came from.
+
+**Phase 2 — Filtering.** A fast keyword pass (`filters.py`) cuts obvious junk — broken watches, parts lots, over-budget listings — before any AI is involved. This runs in milliseconds and eliminates 30–40% of listings, keeping Claude costs low.
+
+**Phase 3 — Scoring.** `scorer.py` sends surviving listings to Claude Haiku with the taste profile as context. It returns a composite score: 60% taste match, 30% value, 10% freshness. Haiku was chosen over Sonnet/Opus because the task is classification, not reasoning — throughput matters more than depth. Cost: ~$0.01–0.05 per 100 listings.
+
+**Phase 4 — Enrichment.** `enricher.py` runs per-listing AI enrichment: model detection, a one-line editorial summary, and structured data extraction. This runs concurrently (8 workers) after each sync.
+
+**Phase 5 — Storage.** SQLite (`db.py`) stores listings, scores, favourites, and user preferences. Chosen for simplicity — no server, no migrations, works locally.
+
+**Phase 6 — UI.** Streamlit (`app.py`) renders a feed of scored listings with sidebar filters (price, source, condition), pagination, a card modal, and a shortlist. The visual design is intentionally editorial — Newsreader serif for display, Geist for UI chrome, near-black on near-white.
+
+**Sync schedule.** APScheduler runs a background sync every 30 minutes. The UI also exposes a manual "Sync now" button.
+
+Full design rationale lives in [`docs/superpowers/specs/2026-06-23-timex-aggregator-design.md`](docs/superpowers/specs/2026-06-23-timex-aggregator-design.md). The implementation plan is in [`docs/superpowers/plans/2026-06-23-timex-aggregator.md`](docs/superpowers/plans/2026-06-23-timex-aggregator.md).
+
+---
 
 ## What it does
 
-- Fetches listings from **eBay, Etsy, Chrono24, and Kijiji** on a configurable schedule (default: every 30 minutes)
+- Fetches listings from **eBay, Etsy, Chrono24, and Kijiji** on a 30-minute schedule
 - Cuts obvious junk in a fast keyword pass before any AI is involved
 - Uses **Claude Haiku** to score every remaining listing on taste, value, and freshness
 - Surfaces results in a clean **Streamlit UI** with sidebar filters, pagination, and a shortlist
