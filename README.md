@@ -86,15 +86,21 @@ cd AR-Timex
 # 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. Add your API keys
-cp .env.example .env
-# Fill in ANTHROPIC_API_KEY, EBAY_APP_ID, EBAY_APP_SECRET
-
-# 4. Run
+# 3. Run
 streamlit run app.py
 ```
 
-Use the **Sync now** button in the top nav to fetch new listings.
+The repo includes a pre-seeded `timex.db` with 83 real listings (eBay, Etsy, Chrono24), all AI-enriched. The app is fully browsable immediately — no API keys needed to explore the feed, filters, and shortlist.
+
+**To run live syncs** you'll need API credentials in a `.env` file:
+
+```bash
+cp .env.example .env
+# Fill in ANTHROPIC_API_KEY, EBAY_APP_ID, EBAY_APP_SECRET
+# PARSE_API_KEY and SCRAPERAPI_KEY are optional
+```
+
+Without `.env`, the Sync button will fail silently — everything else works.
 
 ## Environment variables
 

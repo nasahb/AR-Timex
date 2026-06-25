@@ -1,5 +1,5 @@
 .env
-timex.db
+# timex.db — included in repo as pre-seeded demo data
 __pycache__/
 *.pyc
 .DS_Store

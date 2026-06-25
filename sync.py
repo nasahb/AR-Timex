@@ -22,7 +22,7 @@ def run_sync(conn) -> int:
     prefs = get_preferences(conn)
     search_query = prefs.get("search_query") or "timex vintage"
 
-    PER_SOURCE_CAP = 30
+    PER_SOURCE_CAP = 50
 
     all_listings = []
     if prefs.get("ebay_enabled", 1):
