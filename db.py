@@ -27,21 +27,9 @@ def init_db(conn: sqlite3.Connection) -> None:
             is_new INTEGER DEFAULT 1
         );
 
-        CREATE TABLE IF NOT EXISTS scores (
-            listing_id TEXT PRIMARY KEY,
-            taste_score REAL,
-            value_score REAL,
-            freshness_score REAL,
-            final_score REAL,
-            model_id TEXT,
-            reason TEXT,
-            scored_at TEXT
-        );
-
         CREATE TABLE IF NOT EXISTS preferences (
             id INTEGER PRIMARY KEY DEFAULT 1,
             taste_description TEXT DEFAULT '',
-            threshold REAL DEFAULT 7.5,
             ebay_enabled INTEGER DEFAULT 1,
             etsy_enabled INTEGER DEFAULT 1,
             chrono24_enabled INTEGER DEFAULT 1,
@@ -60,7 +48,6 @@ def init_db(conn: sqlite3.Connection) -> None:
 
         INSERT OR IGNORE INTO preferences (id) VALUES (1);
     """)
-    # Migrations for columns added after initial schema
     migrations = [
         "ALTER TABLE preferences ADD COLUMN search_query TEXT DEFAULT 'timex vintage'",
         "ALTER TABLE preferences ADD COLUMN budget_cad REAL DEFAULT 50.0",
@@ -88,23 +75,6 @@ def init_db(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def save_listing(conn: sqlite3.Connection, listing: dict) -> None:
-    conn.execute(
-        """INSERT OR IGNORE INTO listings
-           (id, source, title, price, shipping, shipping_confirmed, total_cad,
-            seller_country, url, image_url, description, listed_at, synced_at, is_new)
-           VALUES (:id, :source, :title, :price, :shipping, :shipping_confirmed, :total_cad,
-                   :seller_country, :url, :image_url, :description, :listed_at, :synced_at, :is_new)""",
-        listing,
-    )
-    conn.commit()
-
-
-def update_image_urls(conn: sqlite3.Connection, listing_id: str, urls_json: str) -> None:
-    conn.execute("UPDATE listings SET image_urls=? WHERE id=?", (urls_json, listing_id))
-    conn.commit()
-
-
 def get_new_count(conn: sqlite3.Connection) -> int:
     row = conn.execute(
         "SELECT COUNT(*) FROM listings WHERE is_new = 1 AND id NOT IN (SELECT listing_id FROM dismissed)"
@@ -126,7 +96,6 @@ def save_preferences(conn: sqlite3.Connection, prefs: dict) -> None:
     conn.execute(
         """UPDATE preferences SET
            taste_description = :taste_description,
-           threshold = :threshold,
            ebay_enabled = :ebay_enabled,
            etsy_enabled = :etsy_enabled,
            chrono24_enabled = :chrono24_enabled,
@@ -141,16 +110,6 @@ def save_preferences(conn: sqlite3.Connection, prefs: dict) -> None:
            exclude_forparts = :exclude_forparts
            WHERE id = 1""",
         prefs,
-    )
-    conn.commit()
-
-
-def save_score(conn: sqlite3.Connection, score: dict) -> None:
-    conn.execute(
-        """INSERT OR REPLACE INTO scores
-           (listing_id, taste_score, value_score, freshness_score, final_score, model_id, reason, scored_at)
-           VALUES (:listing_id, :taste_score, :value_score, :freshness_score, :final_score, :model_id, :reason, :scored_at)""",
-        score,
     )
     conn.commit()
 
@@ -177,15 +136,6 @@ def save_enrichment(conn: sqlite3.Connection, listing_id: str, result: dict) -> 
         ),
     )
     conn.commit()
-
-
-def get_unscored_ids(conn: sqlite3.Connection) -> list:
-    rows = conn.execute(
-        """SELECT id FROM listings
-           WHERE ai_summary IS NOT NULL
-             AND id NOT IN (SELECT listing_id FROM scores)"""
-    ).fetchall()
-    return [r["id"] for r in rows]
 
 
 def get_listing_by_id(conn: sqlite3.Connection, listing_id: str):
@@ -231,12 +181,9 @@ def toggle_favourite(conn: sqlite3.Connection, listing_id: str) -> bool:
 
 def get_favourites(conn: sqlite3.Connection) -> list:
     rows = conn.execute(
-        """SELECT l.*, s.taste_score, s.value_score, s.freshness_score,
-                  s.final_score, s.model_id, s.reason, f.favourited_at,
-                  1 as is_favourite
+        """SELECT l.*, f.favourited_at, 1 as is_favourite
            FROM listings l
            JOIN favourites f ON l.id = f.listing_id
-           LEFT JOIN scores s ON l.id = s.listing_id
            ORDER BY f.favourited_at DESC"""
     ).fetchall()
     return [dict(r) for r in rows]

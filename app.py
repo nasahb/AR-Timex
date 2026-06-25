@@ -265,43 +265,6 @@ def _price_line(listing):
     return "".join(parts)
 
 
-def _score_panel_html(listing):
-    score = listing.get("final_score")
-    taste = listing.get("taste_score")
-    value = listing.get("value_score")
-    fresh = listing.get("freshness_score")
-    sans = "font-family:'Geist',sans-serif;"
-    mono = "font-family:'JetBrains Mono',monospace;"
-
-    if score is None:
-        return (
-            f'<div style="padding:20px 22px; border-left:1px solid var(--border);">'
-            f'<span style="{sans} font-size:10px; color:var(--ink-3);">Not scored</span>'
-            f'</div>'
-        )
-
-    rows = ""
-    if taste is not None:
-        def row(label, val, fmt):
-            return (
-                f'<div style="display:flex; justify-content:space-between; gap:12px; margin-bottom:5px;">'
-                f'<span style="{sans} font-size:11px; color:var(--ink-3);">{label}</span>'
-                f'<span style="{mono} font-size:11px; color:var(--ink-2);">{fmt % val}</span>'
-                f'</div>'
-            )
-        rows = row("taste", taste, "%.1f") + row("fresh", fresh, "%.0f")
-
-    return (
-        f'<div style="padding:20px 22px; border-left:1px solid var(--border);">'
-        f'<div style="display:flex; align-items:baseline; gap:1px; margin-bottom:20px;">'
-        f'<span style="font-family:\'Newsreader\',serif; font-size:72px; font-weight:500; line-height:1; letter-spacing:-0.04em; color:var(--ink);">{score:.1f}</span>'
-        f'<span style="{sans} font-size:13px; color:var(--ink-3); padding-bottom:6px;">/10</span>'
-        f'</div>'
-        f'{rows}'
-        f'</div>'
-    )
-
-
 # ── sidebar ───────────────────────────────────────────────────────────────────
 
 CLOCK_SVG = (
@@ -684,7 +647,6 @@ section[data-testid="stSidebar"] div[data-testid="InputInstructions"]::after {
 
         save_preferences(conn, {
             "taste_description": taste,
-            "threshold": prefs.get("threshold", config.SCORE_THRESHOLD),
             "ebay_enabled": int(ebay_on),
             "etsy_enabled": int(etsy_on),
             "chrono24_enabled": int(c24_on),
